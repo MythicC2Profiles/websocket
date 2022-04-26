@@ -1,10 +1,15 @@
 {
-    "bindaddress": "0.0.0.0:8081",
-    "usessl": false,
-    "sslkey":"",
-    "sslcert":"",
-    "websocketuri": "socket",
-    "defaultpage": "index.html",
-    "logfile": "server.log",
-    "debug": true
+    "type": "default",
+    "server_certificate": "",
+    "server_key": "",
+    "server_certificate_authority": "",
+    "server_mtls": false,
+    "server_verify_tls": false,
+    "server_generate_pki": false,
+    "server_host": "0.0.0.0",
+    "server_port": 8081,
+    "domain_name": "localhost",
+    "websocket_filename": "socket",
+    "http_filename": "index.html",
+    "log_path": "/var/log/"
 }

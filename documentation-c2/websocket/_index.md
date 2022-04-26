@@ -37,8 +37,41 @@ The profile reads a `config.json` file and starts a Golang websocket client to h
 
 ```JSON
 {
+    "type": "default",
+    "server_certificate": "",
+    "server_key": "",
+    "server_certificate_authority": "",
+    "server_mtls": false,
+    "server_verify_tls": false,
+    "server_generate_pki": false,
+    "server_host": "0.0.0.0",
+    "server_port": 8081,
+    "domain_name": "localhost",
+    "websocket_filename": "socket",
+    "http_filename": "index.html",
+    "log_path": "/var/log/"
+}
+```
+- server_certificate -> The path in the docker container where a server public key can be found
+- server_key -> The path in the docker container where a server private key can be found
+- server_certificate_authority -> The path in the docker container where a server certificate authority can be found
+- server_mtls -> Leverage mTLS
+- server_verify_tls -> enable / disable TLS certificate -> CA verification
+- server_generate_pki -> Generate PKI (cert, key, cacert) for TLS
+- server_host -> The interface address on which to listen (i.e. 0.0.0.0)
+- server_port -> Which port to listen on for callbacks
+- domain_name -> If using TLS, and server_generate_pki - the domain name to include in the certificate
+- websocket_filename -> The web address endpoint where websockets are served
+- http_filename -> The filename served as a page
+- log_path -> The path in the docker container where you want logs stored
+
+**If you are using poseiden you'll have to update the config with the following:**
+
+```JSON
+{
+    "type": "poseidon",
     "bindaddress": "0.0.0.0:8081",
-    "ssl": false,
+    "usessl": false,
     "sslkey":"",
     "sslcert":"",
     "websocketuri": "socket",
@@ -88,4 +121,4 @@ The Agent uses HTTP/S to perform the initial upgrade request before using the we
 
 ## Development
 
-Souce code is available here: https://github.com/xorrior/poseidonC2
+Souce code is available here: https://github.com/ArchiMoebius/mythic_c2_websocket/
