@@ -1,0 +1,3 @@
+[submodule "C2_Profiles/websocket/c2_code/src"]
+	path = C2_Profiles/websocket/c2_code/src
+	url = git@github.com:ArchiMoebius/mythic_c2_websocket.git
