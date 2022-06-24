@@ -8,17 +8,32 @@ This is a Mythic C2 Profile called websocket. It provides a way for agents to co
 
 The c2 profile has `mythic_c2_container==0.0.22` PyPi package installed and reports to Mythic as version "3".
 
+## Websockets C2 Workflow
+```mermaid
+sequenceDiagram
+    participant M as Mythic
+    participant H as websocket
+    participant A as Agent
+    A -> H: 1
+    Note over A: 2
+    loop Websockets Protocol
+    A -->> H: 3
+    H ->> M: 4
+    M -->> H: 5
+    H -->> A: 6
+    end
+```
+
+1. The Agent sends an HTTP/S Upgrade request to the Websockets server. The server responds with "HTTP/1.1 101 Switching Protocols". 
+2. The Agent and Websocket server begin using the websockets protocol to send and receive messages.
+3. Agent sends a message to receive taskings from server. The Message is inside a `Text Frame` as JSON of `{"client":true,"data": <b64data_to_mythic>,"tag":""}`
+4. Websocket sends a GET/POST request to receive taskings from Mythic
+5. Mythic returns tasks to Websocket
+6. Websocket sends new tasks to the agent. The Message is inside a `Text Frame` as JSON of `{"client":false,"data": <b64data_from_mythic>,"tag":""}`
 
 ## How to install an agent in this format within Mythic
 
-When it's time for you to test out your install or for another user to install your agent, it's pretty simple. Within Mythic is a `install_agent_from_github.sh` script (https://github.com/its-a-feature/Mythic/blob/master/install_agent_from_github.sh). You can run this in one of two ways:
+Use mythic-cli to install it:
+`sudo ./mythic-cli install github https://github.com/MythicC2Profiles/websocket.git`
 
-* `sudo ./install_agent_from_github.sh https://github.com/user/repo` to install the main branch
-* `sudo ./install_agent_from_github.sh https://github.com/user/repo branchname` to install a specific branch of that repo
-
-Now, you might be wondering _when_ should you or a user do this to properly add your agent to their Mythic instance. There's no wrong answer here, just depends on your preference. The three options are:
-
-* Mythic is already up and going, then you can run the install script and just direct that agent's containers to start (i.e. `sudo ./start_payload_types.sh agentName` and if that agent has its own special C2 containers, you'll need to start them too via `sudo ./start_c2_profiles.sh c2profileName`).
-* Mythic is already up and going, but you want to minimize your steps, you can just install the agent and run `sudo ./start_mythic.sh`. That script will first _stop_ all of your containers, then start everything back up again. This will also bring in the new agent you just installed.
-* Mythic isn't running, you can install the script and just run `sudo ./start_mythic.sh`. 
-
+See https://docs.mythic-c2.net/installation#installing-agents-c2-profiles for more information

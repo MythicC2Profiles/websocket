@@ -51,7 +51,7 @@ class Websocket(C2Profile):
         ),
         C2ProfileParameter(
             name="ENDPOINT_REPLACE",
-            description="Websockets Endpoint",
+            description="Websocket Endpoint / URI Path. Should match websocketuri from the config",
             default_value="socket",
             required=False,
         ),
