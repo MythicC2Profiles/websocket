@@ -1,6 +1,4 @@
-FROM itsafeaturemythic/mythic_base_image:0.0.2
-
-RUN pip3 install mythic-container==0.2.0rc25
+FROM itsafeaturemythic/mythic_base:latest
 
 WORKDIR /Mythic/
 
