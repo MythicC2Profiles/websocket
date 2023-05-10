@@ -1,1 +1,9 @@
-FROM itsafeaturemythic/python38_sanic_c2profile:0.0.5
+FROM itsafeaturemythic/mythic_base:latest
+
+WORKDIR /Mythic/
+
+COPY [".", "."]
+
+RUN make build
+
+CMD make run
