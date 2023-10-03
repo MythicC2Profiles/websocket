@@ -79,3 +79,24 @@ class Websocket(C2Profile):
             parameter_type=ParameterType.ChooseOne,
         ),
     ]
+
+    async def host_file(self, inputMsg: C2HostFileMessage) -> C2HostFileMessageResponse:
+        """Host a file through a c2 channel
+
+        :param inputMsg: The file UUID to host and which URL to host it at
+        :return: C2HostFileMessageResponse detailing success or failure to host the file
+        """
+        response = C2HostFileMessageResponse(Success=False)
+        try:
+            config = json.load(open("websocket/c2_code/config.json", "r"))
+            for i in range(len(config["instances"])):
+                if "payloads" not in config["instances"][i]:
+                    config["instances"][i]["payloads"] = {}
+                config["instances"][i]["payloads"][inputMsg.HostURL] = inputMsg.FileUUID
+            with open("websocket/c2_code/config.json", 'w') as configFile:
+                configFile.write(json.dumps(config, indent=4))
+            response.Success = True
+            response.Message = "Successfully updated"
+        except Exception as e:
+            response.Error = f"{e}"
+        return response
