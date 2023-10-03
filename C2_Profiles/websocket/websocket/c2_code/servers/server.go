@@ -2,30 +2,32 @@ package servers
 
 // C2Config - struct for server configuration
 type C2Config struct {
-	BindAddress string `json:"bindaddress"`
-	SocketURI   string `json:"websocketuri"`
-	SSLKey      string `json:"sslkey"`
-	SSLCert     string `json:"sslcert"`
-	UseSSL      bool   `json:"usessl"`
-	Defaultpage string `json:"defaultpage"`
-	Logfile     string `json:"logfile"`
-	Debug       bool   `json:"debug"`
+	Instances []C2ConfigEntry `json:"instances"`
+}
+type C2ConfigEntry struct {
+	BindAddress string            `json:"bindaddress"`
+	SocketURI   string            `json:"websocketuri"`
+	SSLKey      string            `json:"sslkey"`
+	SSLCert     string            `json:"sslcert"`
+	UseSSL      bool              `json:"usessl"`
+	Defaultpage string            `json:"defaultpage"`
+	Logfile     string            `json:"logfile"`
+	Debug       bool              `json:"debug"`
+	Payloads    map[string]string `json:"payloads"`
 }
 
 // Server - interface used for all c2 profiles
 type Server interface {
-	ApfellBaseURL() string
+	MythicBaseURL() string
 	SetMythicBaseURL(url string)
-	Run(cf interface{})
+	Run(cf C2ConfigEntry)
 }
 
 // Message - struct definition for messages between clients and the server
 type Message struct {
-	Tag    string `json:"tag"`
-	Client bool   `json:"client"`
-	Data   string `json:"data"`
+	Data string `json:"data"`
 }
 
-func NewInstance() interface{} {
+func NewInstance() Server {
 	return newServer()
 }

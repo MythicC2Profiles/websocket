@@ -7,7 +7,6 @@ class Websocket(C2Profile):
     description = "Websocket C2 Server for poseidon"
     author = "@xorrior"
     is_p2p = False
-    is_server_routed = False
     server_binary_path = pathlib.Path(".") / "websocket" / "c2_code" / "mythic_websocket_server"
     server_folder_path = pathlib.Path(".") / "websocket" / "c2_code"
     parameters = [
@@ -71,5 +70,12 @@ class Websocket(C2Profile):
             default_value="8081",
             verifier_regex="^[0-9]+$",
             required=False,
+        ),
+        C2ProfileParameter(
+            name="tasking_type",
+            description="'Poll' for tasking at an interval or have Mythic 'Push' new tasking as it arrives",
+            default_value="Poll",
+            choices=["Poll", "Push"],
+            parameter_type=ParameterType.ChooseOne,
         ),
     ]
