@@ -80,6 +80,35 @@ class Websocket(C2Profile):
         ),
     ]
 
+    async def redirect_rules(self, inputMsg: C2GetRedirectorRulesMessage) -> C2GetRedirectorRulesMessageResponse:
+        """Generate Apache ModRewrite rules given the Payload's C2 configuration
+
+        :param inputMsg: Payload's C2 Profile configuration
+        :return: C2GetRedirectorRulesMessageResponse detailing some Apache ModRewrite rules for the payload
+        """
+        response = C2GetRedirectorRulesMessageResponse(Success=True)
+        output = "########################################\n"
+        output += "## .htaccess START\n"
+        output += "RewriteEngine On\n"
+        output += "RewriteCond %{REQUEST_METHOD} ^(GET|POST) [NC]\n"
+        output += f"RewriteCond %{{REQUEST_URI}} ^(/{inputMsg.Parameters['ENDPOINT_REPLACE']}.*)$\n"
+        userAgent = inputMsg.Parameters['USER_AGENT'].replace('(', '\\(').replace(')', '\\)')
+        output += f"RewriteCond %{{HTTP_USER_AGENT}} \"{userAgent}\"\n"
+        output += "RewriteCond %{HTTP:Upgrade} websocket [NC]\n"
+        output += "RewriteCond %{HTTP:Connection} upgrade [NC]\n"
+        with open("websocket/c2_code/config.json", "r") as f:
+            config = json.load(f)
+            for i in range(len(config["instances"])):
+                url = "\"wss://" if config["instances"][i]["usessl"] else "\"ws://"
+                url += f"C2_SERVER_HERE:{config['instances'][i]['bindaddress'].split(':')[1]}"
+                url += "%{REQUEST_URI}\" [P,L]"
+                output += f"RewriteRule ^.*$ {url}\n"
+        output += "RewriteRule ^.*$ redirect/? [L,R=302]\n"
+        output += "## .htaccess END\n"
+        output += "########################################\n"
+        response.Message = output
+        return response
+
     async def host_file(self, inputMsg: C2HostFileMessage) -> C2HostFileMessageResponse:
         """Host a file through a c2 channel
 
