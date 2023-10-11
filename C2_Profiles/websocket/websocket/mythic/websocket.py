@@ -78,6 +78,12 @@ class Websocket(C2Profile):
             choices=["Poll", "Push"],
             parameter_type=ParameterType.ChooseOne,
         ),
+        C2ProfileParameter(
+            name="killdate",
+            description="Killdate for when the C2 Profile should stop working and exit the agent",
+            default_value=365,
+            parameter_type=ParameterType.Date,
+        ),
     ]
 
     async def redirect_rules(self, inputMsg: C2GetRedirectorRulesMessage) -> C2GetRedirectorRulesMessageResponse:
