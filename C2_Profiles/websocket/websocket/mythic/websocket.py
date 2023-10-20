@@ -94,6 +94,8 @@ class Websocket(C2Profile):
         """
         response = C2GetRedirectorRulesMessageResponse(Success=True)
         output = "########################################\n"
+        output += "# You need to enable the appropriate proxy mod in apache for websocket proxying to work:\n"
+        output += "# `sudo a2enmod proxy_wstunnel`"
         output += "## .htaccess START\n"
         output += "RewriteEngine On\n"
         output += "RewriteCond %{REQUEST_METHOD} ^(GET|POST) [NC]\n"
