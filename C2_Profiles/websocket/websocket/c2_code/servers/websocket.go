@@ -323,8 +323,10 @@ func (s *WebsocketC2) Run(cf C2ConfigEntry) {
 
 	// Handle requests to the base uri
 	for url, fileID := range cf.Payloads {
-		logging.LogInfo("Hosting file", "path", url, "uuid", fileID)
-		http.HandleFunc(url, s.ServeFileWrapper(fileID))
+		localFileID := fileID
+		localURL := url
+		logging.LogInfo("Hosting file", "path", url, "uuid", localFileID)
+		http.HandleFunc(localURL, s.ServeFileWrapper(localFileID))
 	}
 	http.HandleFunc("/", s.ServeDefaultPage)
 	// Handle requests to the websockets uri
