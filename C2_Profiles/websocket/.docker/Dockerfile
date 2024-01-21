@@ -1,16 +1,13 @@
 FROM itsafeaturemythic/mythic_python_go:latest as builder
 
+COPY [".docker/requirements.txt", "requirements.txt"]
+RUN python3 -m pip wheel --wheel-dir /wheels -r requirements.txt
+
 WORKDIR /Mythic/
 
 COPY [".", "."]
 
 RUN make build
-
-COPY [".docker/requirements.txt", "requirements.txt"]
-RUN python3 -m pip wheel --wheel-dir /wheels -r requirements.txt
-
-CMD make run
-
 
 FROM python:3.11-slim-bookworm
 
@@ -23,4 +20,4 @@ WORKDIR /Mythic/
 
 COPY [".", "."]
 
-CMD ["python3", "main.py"]
+CMD make run
