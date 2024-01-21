@@ -1,9 +1,1 @@
-FROM itsafeaturemythic/mythic_python_go:latest
-
-WORKDIR /Mythic/
-
-COPY [".", "."]
-
-RUN make build
-
-CMD make run
+FROM ghcr.io/mythicc2profiles/websocket:v0.0.1-rc3
