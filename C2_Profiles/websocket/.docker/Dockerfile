@@ -15,6 +15,7 @@ COPY --from=builder /wheels /wheels
 COPY --from=builder /mythic_websocket_server /mythic_websocket_server
 
 RUN pip install --no-cache /wheels/*
+RUN apt-get update && apt-get install --no-install-recommends  make -y
 
 WORKDIR /Mythic/
 
