@@ -1,1 +1,1 @@
-FROM ghcr.io/mythicc2profiles/websocket:v0.0.1
+FROM ghcr.io/mythicc2profiles/websocket:v0.0.1.1
