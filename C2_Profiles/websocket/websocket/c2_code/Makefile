@@ -13,16 +13,13 @@ build:
 	CGO_ENABLED=0 go build -o ${BINARY_NAME} -tags=websocket .
 	cp ${BINARY_NAME} /
 
-build_local:
+local:
 	go mod download 
 	go mod tidy
 	CGO_ENABLED=0 go build -o ${BINARY_NAME} -tags=websocket .
 
 run:
 	cp /${BINARY_NAME} .
-
-build_macos:
-	CGO_ENABLED=0 go build -o ${BINARY_NAME} -tags=websocket .
 
 run_custom:
 	DEBUG_LEVEL=${DEBUG_LEVEL} \

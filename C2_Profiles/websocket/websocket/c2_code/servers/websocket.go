@@ -185,19 +185,12 @@ func (s *WebsocketC2) getNewPushClient() services.PushC2Client {
 	return services.NewPushC2Client(s.getGRPConnection())
 }
 func (s *WebsocketC2) managePushClient(websocketClient *websocket.Conn) {
-	defer websocketClient.Close()
 	grpcClient := s.getNewPushClient()
-	streamContext, cancel := context.WithCancel(context.Background())
-	defer func() {
-		cancel()
-		err := websocketClient.Close()
-		if err != nil {
-			log.Printf("Failed to close websocket connection: %v\n", err)
-		}
-	}()
+	streamContext, _ := context.WithCancel(context.Background())
 	grpcStream, err := grpcClient.StartPushC2Streaming(streamContext)
 	if err != nil {
 		log.Printf("Failed to get new client: %v\n", err)
+		websocketClient.Close()
 		return
 	} else {
 		log.Printf("Got new push client")
@@ -207,7 +200,9 @@ func (s *WebsocketC2) managePushClient(websocketClient *websocket.Conn) {
 	go func() {
 		defer func() {
 			log.Printf("finished websocket -> grpc\n")
-			cancel()
+			grpcStream.CloseSend()
+			websocketClient.Close()
+			//cancel()
 			closeConnection <- true
 		}()
 		for {
@@ -231,7 +226,6 @@ func (s *WebsocketC2) managePushClient(websocketClient *websocket.Conn) {
 			})
 			if readErr != nil {
 				log.Printf("failed to send message to grpc stream: %v\n", readErr)
-				grpcStream.CloseSend()
 				return
 			}
 			//log.Printf("sent agent message to Mythic")
@@ -241,13 +235,15 @@ func (s *WebsocketC2) managePushClient(websocketClient *websocket.Conn) {
 	go func() {
 		defer func() {
 			log.Printf("finished grpc -> websocket\n")
+			grpcStream.CloseSend()
+			websocketClient.Close()
+			//cancel()
 			closeConnection <- true
 		}()
 		for {
 			fromMythic, readErr := grpcStream.Recv()
 			if readErr != nil {
 				log.Printf("Failed to read from grpc stream, closing connections: %v\n", readErr)
-				grpcStream.CloseSend()
 				return
 			}
 			reply := Message{}

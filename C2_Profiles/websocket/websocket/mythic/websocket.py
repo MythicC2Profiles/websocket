@@ -1,10 +1,11 @@
 from mythic_container.C2ProfileBase import *
 import pathlib
 
+version = "0.1.0"
 
 class Websocket(C2Profile):
     name = "websocket"
-    description = "Websocket C2 Server for poseidon"
+    description = f"Websocket C2 Server with Poll and Push capabilities. Version {version}"
     author = "@xorrior"
     is_p2p = False
     server_binary_path = pathlib.Path(".") / "websocket" / "c2_code" / "mythic_websocket_server"
