@@ -1,3 +1,9 @@
+## [v0.1.2] - 2024-03-25
+
+### Changed
+
+- Updated go.mod/go.sum files
+
 ## [v0.1.1] - 2024-03-25
 
 ### Changed
