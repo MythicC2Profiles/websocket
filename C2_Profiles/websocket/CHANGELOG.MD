@@ -1,3 +1,9 @@
+## [v0.1.1] - 2024-03-25
+
+### Changed
+
+- Updated gRPC with MythicContainer package. Needs Mythic 3.2.20-rc6+
+
 ## [v0.1.0] - 2024-03-21
 
 ### Changed

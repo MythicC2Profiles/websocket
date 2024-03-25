@@ -186,7 +186,8 @@ func (s *WebsocketC2) getNewPushClient() services.PushC2Client {
 }
 func (s *WebsocketC2) managePushClient(websocketClient *websocket.Conn) {
 	grpcClient := s.getNewPushClient()
-	streamContext, _ := context.WithCancel(context.Background())
+	streamContext, cancel := context.WithCancel(context.Background())
+	defer cancel()
 	grpcStream, err := grpcClient.StartPushC2Streaming(streamContext)
 	if err != nil {
 		log.Printf("Failed to get new client: %v\n", err)
@@ -220,7 +221,6 @@ func (s *WebsocketC2) managePushClient(websocketClient *websocket.Conn) {
 			readErr = grpcStream.Send(&services.PushC2MessageFromAgent{
 				C2ProfileName: "websocket",
 				RemoteIP:      websocketClient.RemoteAddr().String(),
-				TaskingSize:   0,
 				Message:       nil,
 				Base64Message: []byte(fromAgent.Data),
 			})

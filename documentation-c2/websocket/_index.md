@@ -43,7 +43,6 @@ The profile reads a `config.json` file and starts a Golang websocket client to h
     "sslcert":"",
     "websocketuri": "socket",
     "defaultpage": "index.html",
-    "logfile": "server.log",
     "debug": true
 }
 ```
@@ -86,6 +85,15 @@ This is the port to use when connecting to the Callback Host. If connecting to a
 
 The Agent uses HTTP/S to perform the initial upgrade request before using the websockets protocol.
 
-## Development
+## Push vs Poll
+When creating an agent to utilize this C2 profile, you can decide if you want to support Poll (agent periodically issues get_tasking requests through the websocket connection) or Push (agent sends a checkin message when connecting, then waits for messages to get pushed to it).
 
-Souce code is available here: https://github.com/xorrior/poseidonC2
+Push vs Poll is determined by a header, `Accept-Type`, when making the initial connection:
+```Go
+taskingType, ok := r.Header["Accept-Type"]
+if !ok || (len(taskingType) > 0 && taskingType[0] == "Poll") {
+    go s.managePollClient(conn)
+} else {
+    go s.managePushClient(conn)
+}
+```
