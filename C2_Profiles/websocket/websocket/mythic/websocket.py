@@ -1,7 +1,7 @@
 from mythic_container.C2ProfileBase import *
 import pathlib
 
-version = "0.1.0"
+version = "0.1.1"
 
 class Websocket(C2Profile):
     name = "websocket"
