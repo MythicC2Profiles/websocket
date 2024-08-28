@@ -1,3 +1,4 @@
 .idea/
 __pycache__/
 mythic_websocket_server
+C2_Profiles/websocket/websocket/c2_code/.env
