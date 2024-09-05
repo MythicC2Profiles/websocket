@@ -282,6 +282,7 @@ func (s *WebsocketC2) ServeFileWrapper(fileUUID string) func(http.ResponseWriter
 		req.URL.Host = fmt.Sprintf("%s:%s", mythicServerHost, mythicServerPort)
 		req.Host = fmt.Sprintf("%s:%s", mythicServerHost, mythicServerPort)
 		req.URL.Path = "/direct/download/" + fileUUID
+		req.Header.Add("mythic", "websocket")
 	}
 	proxyForFiles := &httputil.ReverseProxy{Director: directorForFiles,
 		Transport: &http.Transport{
