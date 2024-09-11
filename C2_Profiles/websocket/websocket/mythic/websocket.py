@@ -99,19 +99,20 @@ class Websocket(C2Profile):
         output += "# `sudo a2enmod proxy_wstunnel`"
         output += "## .htaccess START\n"
         output += "RewriteEngine On\n"
-        output += "RewriteCond %{REQUEST_METHOD} ^(GET|POST) [NC]\n"
-        output += f"RewriteCond %{{REQUEST_URI}} ^(/{inputMsg.Parameters['ENDPOINT_REPLACE']}.*)$\n"
-        userAgent = inputMsg.Parameters['USER_AGENT'].replace('(', '\\(').replace(')', '\\)')
-        output += f"RewriteCond %{{HTTP_USER_AGENT}} \"{userAgent}\"\n"
-        output += "RewriteCond %{HTTP:Upgrade} websocket [NC]\n"
-        output += "RewriteCond %{HTTP:Connection} upgrade [NC]\n"
         with open("websocket/c2_code/config.json", "r") as f:
             config = json.load(f)
             for i in range(len(config["instances"])):
                 url = "\"wss://" if config["instances"][i]["usessl"] else "\"ws://"
                 url += f"C2_SERVER_HERE:{config['instances'][i]['bindaddress'].split(':')[1]}"
                 url += "%{REQUEST_URI}\" [P,L]"
+                output += "RewriteCond %{REQUEST_METHOD} ^(GET|POST) [NC]\n"
+                output += f"RewriteCond %{{REQUEST_URI}} ^(/{inputMsg.Parameters['ENDPOINT_REPLACE']}.*)$\n"
+                userAgent = inputMsg.Parameters['USER_AGENT'].replace('(', '\\(').replace(')', '\\)')
+                output += f"RewriteCond %{{HTTP_USER_AGENT}} \"{userAgent}\"\n"
+                output += "RewriteCond %{HTTP:Upgrade} websocket [NC]\n"
+                output += "RewriteCond %{HTTP:Connection} upgrade [NC]\n"
                 output += f"RewriteRule ^.*$ {url}\n"
+
         output += "RewriteRule ^.*$ redirect/? [L,R=302]\n"
         output += "## .htaccess END\n"
         output += "########################################\n"
