@@ -74,6 +74,8 @@ func (s *WebsocketC2) PostMessage(msg []byte) []byte {
 		}
 		return make([]byte, 0)
 	} else {
+		req.Header.Add("X-forwarded-user-agent", req.Header.Get("User-Agent"))
+		req.Header.Add("x-forwarded-url", req.URL.RequestURI())
 		req.Header.Add("Mythic", "websocket")
 		contentLength := len(msg)
 		req.ContentLength = int64(contentLength)
@@ -278,6 +280,8 @@ func (s *WebsocketC2) ServeFileWrapper(fileUUID string) func(http.ResponseWriter
 	mythicServerHost := os.Getenv("MYTHIC_SERVER_HOST")
 	mythicServerPort := os.Getenv("MYTHIC_SERVER_PORT")
 	directorForFiles := func(req *http.Request) {
+		req.Header.Add("X-forwarded-user-agent", req.Header.Get("User-Agent"))
+		req.Header.Add("x-forwarded-url", req.URL.RequestURI())
 		req.URL.Scheme = "http"
 		req.URL.Host = fmt.Sprintf("%s:%s", mythicServerHost, mythicServerPort)
 		req.Host = fmt.Sprintf("%s:%s", mythicServerHost, mythicServerPort)
