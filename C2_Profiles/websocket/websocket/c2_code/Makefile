@@ -22,6 +22,9 @@ run:
 	cp /${BINARY_NAME} .
 
 run_custom:
+	go mod download
+	go mod tidy
+	CGO_ENABLED=0 go build -o ${BINARY_NAME} -tags=websocket .
 	DEBUG_LEVEL=${DEBUG_LEVEL} \
 MYTHIC_SERVER_HOST=${MYTHIC_SERVER_HOST} \
 MYTHIC_SERVER_PORT=${MYTHIC_SERVER_PORT} \

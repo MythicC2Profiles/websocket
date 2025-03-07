@@ -321,18 +321,18 @@ func (s *WebsocketC2) Run(cf C2ConfigEntry) {
 	s.SetMythicBaseURL(fmt.Sprintf("http://%s:%s/agent_message", mythicServerHost, mythicServerPort))
 	s.SetBindAddress(cf.BindAddress)
 	s.SetSocketURI(cf.SocketURI)
-
+	newHTTPMux := http.NewServeMux()
 	// Handle requests to the base uri
 	for url, fileID := range cf.Payloads {
 		localFileID := fileID
 		localURL := url
 		logging.LogInfo("Hosting file", "path", url, "uuid", localFileID)
-		http.HandleFunc(localURL, s.ServeFileWrapper(localFileID))
+		newHTTPMux.HandleFunc(localURL, s.ServeFileWrapper(localFileID))
 	}
-	http.HandleFunc("/", s.ServeDefaultPage)
+	newHTTPMux.HandleFunc("/", s.ServeDefaultPage)
 	// Handle requests to the websockets uri
 	logging.LogInfo("Serving websocket", "path", s.SocketURI)
-	http.HandleFunc(fmt.Sprintf("/%s", s.SocketURI), s.SocketHandler)
+	newHTTPMux.HandleFunc(fmt.Sprintf("/%s", s.SocketURI), s.SocketHandler)
 
 	// Setup all the options according to the configuration
 	if !strings.Contains(cf.SSLKey, "") && !strings.Contains(cf.SSLCert, "") {
@@ -368,7 +368,7 @@ func (s *WebsocketC2) Run(cf C2ConfigEntry) {
 		if s.Debug {
 			log.Println(fmt.Sprintf("Starting SSL server at https://%s and wss://%s", cf.BindAddress, cf.BindAddress))
 		}
-		err = http.ListenAndServeTLS(cf.BindAddress, "cert.pem", "key.pem", nil)
+		err = http.ListenAndServeTLS(cf.BindAddress, "cert.pem", "key.pem", newHTTPMux)
 		if err != nil {
 			log.Fatal("Failed to start raven server: ", err)
 		}
@@ -376,7 +376,7 @@ func (s *WebsocketC2) Run(cf C2ConfigEntry) {
 		if s.Debug {
 			log.Println(fmt.Sprintf("Starting server at http://%s and ws://%s", cf.BindAddress, cf.BindAddress))
 		}
-		err := http.ListenAndServe(cf.BindAddress, nil)
+		err := http.ListenAndServe(cf.BindAddress, newHTTPMux)
 		if err != nil {
 			log.Fatal("Failed to start websocket server: ", err)
 		}
