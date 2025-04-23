@@ -10,13 +10,18 @@ import (
 
 func main() {
 	c2config := servers.C2Config{}
-	if cf, err := os.Open("config.json"); err != nil {
+	cf, err := os.Open("config.json")
+	if err != nil {
 		logging.LogError(err, "Error opening config file")
 		os.Exit(-1)
-	} else if config, err := io.ReadAll(cf); err != nil {
+	}
+	config, err := io.ReadAll(cf)
+	if err != nil {
 		logging.LogError(err, "Error in reading config file")
 		os.Exit(-1)
-	} else if err = json.Unmarshal(config, &c2config); err != nil {
+	}
+	err = json.Unmarshal(config, &c2config)
+	if err != nil {
 		logging.LogError(err, "Error in unmarshal call for config")
 		os.Exit(-1)
 	}

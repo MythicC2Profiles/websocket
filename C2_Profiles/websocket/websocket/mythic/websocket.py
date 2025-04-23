@@ -3,6 +3,7 @@ import pathlib
 
 version = "0.1.1"
 
+
 class Websocket(C2Profile):
     name = "websocket"
     description = f"Websocket C2 Server with Poll and Push capabilities. Version {version}"
