@@ -1,7 +1,8 @@
 from mythic_container.C2ProfileBase import *
 import pathlib
 
-version = "0.1.1"
+version = "0.1.2"
+
 
 
 class Websocket(C2Profile):
@@ -13,78 +14,103 @@ class Websocket(C2Profile):
     server_folder_path = pathlib.Path(".") / "websocket" / "c2_code"
     parameters = [
         C2ProfileParameter(
-            name="callback_host",
-            description="Callback Host",
-            default_value="ws://127.0.0.1",
-            verifier_regex="^(ws|wss)://[a-zA-Z0-9]+",
+            name="callback_hosts",
+            description="Callback hosts (including optional port)",
+            parameter_type=ParameterType.Array,
+            default_value=["ws://127.0.0.1", "ws://127.0.1.1:8081"],
+            verifier_regex=f"^(ws|wss)://[a-zA-Z0-9.]+(:[0-9]{2, 5})?",
+            required=True,
         ),
         C2ProfileParameter(
-            name="USER_AGENT",
-            description="User Agent",
-            default_value="Mozilla/5.0 (Windows NT 6.3; Trident/7.0; rv:11.0) like Gecko",
+            name="domain_rotation_method",
+            description="Domain rotation method",
+            parameter_type=ParameterType.ChooseOne,
+            default_value="fail-over",
+            choices=["fail-over", "random"],
+            required=False,
+        ),
+        C2ProfileParameter(
+            name="domain_rotation_delay",
+            description="Domain rotation delay",
+            parameter_type=ParameterType.Number,
+            default_value=10,
+            required=False,
+        ),
+        C2ProfileParameter(
+            name="domain_rotation_failure_threshold",
+            description="Domain rotation failure threshold",
+            parameter_type=ParameterType.Number,
+            default_value=-1,
+            required=False,
+        ),
+        C2ProfileParameter(
+            name="headers",
+            description="Custom headers",
+            parameter_type=ParameterType.Dictionary,
+            dictionary_choices=[
+                DictionaryChoice(name="user-agent",
+                                 default_value="Mozilla/5.0 (Windows NT 6.3; Trident/7.0; rv:11.0) like Gecko",
+                                 default_show=True,
+                                 ),
+                DictionaryChoice(name="host",
+                                 default_value="",
+                                 default_show=False,
+                                 ),
+            ],
             required=False,
         ),
         C2ProfileParameter(
             name="AESPSK",
             description="Crypto type",
-            default_value="aes256_hmac",
             parameter_type=ParameterType.ChooseOne,
+            default_value="aes256_hmac",
             choices=["aes256_hmac", "none"],
             required=False,
-            crypto_type=True
+            crypto_type=True,
         ),
         C2ProfileParameter(
             name="callback_interval",
             description="Callback Interval in seconds",
-            default_value="10",
-            verifier_regex="^[0-9]+$",
+            parameter_type=ParameterType.Number,
+            default_value=10,
             required=False,
         ),
         C2ProfileParameter(
             name="encrypted_exchange_check",
             description="Perform Key Exchange",
-            choices=["T", "F"],
-            parameter_type=ParameterType.ChooseOne,
+            parameter_type=ParameterType.Boolean,
+            default_value=True,
             required=False,
         ),
         C2ProfileParameter(
-            name="domain_front",
-            description="Host header value for domain fronting",
-            default_value="",
-            required=False,
-        ),
-        C2ProfileParameter(
-            name="ENDPOINT_REPLACE",
+            name="endpoint",
             description="Websockets Endpoint",
-            default_value="socket",
+            parameter_type=ParameterType.String,
+            default_value="/socket",
+            verifier_regex=f"^/[a-zA-Z0-9]",
             required=False,
         ),
         C2ProfileParameter(
             name="callback_jitter",
             description="Callback Jitter in percent",
-            default_value="37",
-            verifier_regex="^[0-9]+$",
-            required=False,
-        ),
-        C2ProfileParameter(
-            name="callback_port",
-            description="Callback Port",
-            default_value="8081",
-            verifier_regex="^[0-9]+$",
+            parameter_type=ParameterType.Number,
+            default_value=37,
             required=False,
         ),
         C2ProfileParameter(
             name="tasking_type",
             description="'Poll' for tasking at an interval or have Mythic 'Push' new tasking as it arrives",
-            default_value="Poll",
-            choices=["Poll", "Push"],
             parameter_type=ParameterType.ChooseOne,
+            default_value="Push",
+            choices=["Poll", "Push"],
+            required=False
         ),
         C2ProfileParameter(
             name="killdate",
             description="Killdate for when the C2 Profile should stop working and exit the agent",
-            default_value=365,
             parameter_type=ParameterType.Date,
+            default_value=365,
+            required=False
         ),
     ]
 
