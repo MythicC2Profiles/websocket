@@ -1,3 +1,11 @@
+## [v0.1.3] - 2025-10-07
+
+### Changed
+
+- Updated pypi version
+- Added websocket svg
+- Updated for dynamic parameters and semver tracking
+
 ## [v0.1.2] - 2024-03-25
 
 ### Changed

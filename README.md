@@ -6,7 +6,7 @@ This is a Mythic C2 Profile called websocket. It provides a way for agents to co
 * Sleep Intervals (for the messages within the single websocket connection)
 * Support for SSL
 
-The c2 profile has `mythic_container==0.0.24` PyPi package installed and reports to Mythic as version "3".
+The c2 profile has `mythic_container==0.6.0` PyPi package installed.
 
 ## Websockets C2 Workflow
 ```mermaid
@@ -37,3 +37,7 @@ Use mythic-cli to install it:
 `sudo ./mythic-cli install github https://github.com/MythicC2Profiles/websocket.git`
 
 See https://docs.mythic-c2.net/installation#installing-agents-c2-profiles for more information
+
+## Logo
+
+New websocket logo in Mythic UI from https://freebiesupply.com/logos/websocket-logo/

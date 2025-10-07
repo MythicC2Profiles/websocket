@@ -1,14 +1,16 @@
 from mythic_container.C2ProfileBase import *
 import pathlib
 
-version = "0.1.1"
 
 
 class Websocket(C2Profile):
     name = "websocket"
-    description = f"Websocket C2 Server with Poll and Push capabilities. Version {version}"
+    description = f"Websocket C2 Server with Poll and Push capabilities."
     author = "@xorrior"
     is_p2p = False
+    semver = "0.1.3"
+    agent_icon_path = pathlib.Path(".") / "websocket" / "mythic" / "websocket.svg"
+    dark_mode_agent_icon_path = pathlib.Path(".") / "websocket" / "mythic" / "websocket_darkmode.svg"
     server_binary_path = pathlib.Path(".") / "websocket" / "c2_code" / "mythic_websocket_server"
     server_folder_path = pathlib.Path(".") / "websocket" / "c2_code"
     parameters = [
