@@ -8,7 +8,7 @@ class Websocket(C2Profile):
     description = f"Websocket C2 Server with Poll and Push capabilities."
     author = "@xorrior"
     is_p2p = False
-    semver = "0.1.4"
+    semver = "0.2.0"
     agent_icon_path = pathlib.Path(".") / "websocket" / "mythic" / "websocket.svg"
     dark_mode_agent_icon_path = pathlib.Path(".") / "websocket" / "mythic" / "websocket_darkmode.svg"
     server_binary_path = pathlib.Path(".") / "websocket" / "c2_code" / "mythic_websocket_server"
@@ -122,19 +122,26 @@ class Websocket(C2Profile):
         response.Message = output
         return response
 
-    async def host_file(self, inputMsg: C2HostFileMessage) -> C2HostFileMessageResponse:
+    async def host_file(self, inputMsg: C2HostFilesMessage) -> C2HostFilesMessageResponse:
         """Host a file through a c2 channel
 
         :param inputMsg: The file UUID to host and which URL to host it at
         :return: C2HostFileMessageResponse detailing success or failure to host the file
         """
-        response = C2HostFileMessageResponse(Success=False)
+        response = C2HostFilesMessageResponse(Success=False)
         try:
             config = json.load(open("websocket/c2_code/config.json", "r"))
             for i in range(len(config["instances"])):
                 if "payloads" not in config["instances"][i]:
                     config["instances"][i]["payloads"] = {}
-                config["instances"][i]["payloads"][inputMsg.HostURL] = inputMsg.FileUUID
+                for f in inputMsg.Files:
+                    if f.Remove:
+                        del config["instances"][i]["payloads"][f.HostURL]
+                        continue
+                    config["instances"][i]["payloads"][f.HostURL] = {
+                        "agent_file_id": f.AgentFileID,
+                        "download_token": f.DownloadToken,
+                    }
             with open("websocket/c2_code/config.json", 'w') as configFile:
                 configFile.write(json.dumps(config, indent=4))
             response.Success = True

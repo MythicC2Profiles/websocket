@@ -5,21 +5,22 @@ package servers
 import (
 	"bytes"
 	"context"
-	"crypto/tls"
 	"fmt"
-	mythicGRPC "github.com/MythicMeta/MythicContainer/grpc"
-	"github.com/MythicMeta/MythicContainer/grpc/services"
-	"github.com/MythicMeta/MythicContainer/logging"
-	"google.golang.org/grpc"
 	"io"
 	"log"
 	"net"
 	"net/http"
 	"net/http/httputil"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
+
+	mythicGRPC "github.com/MythicMeta/MythicContainer/grpc"
+	"github.com/MythicMeta/MythicContainer/grpc/services"
+	"github.com/MythicMeta/MythicContainer/logging"
+	"google.golang.org/grpc"
 
 	"github.com/gorilla/websocket"
 	"github.com/kabukky/httpscerts"
@@ -35,13 +36,45 @@ type WebsocketC2 struct {
 	Debug       bool
 	Lock        sync.RWMutex
 	PushConn    *grpc.ClientConn
+	HTTPClient  *http.Client
 }
 
-var tr = &http.Transport{
-	TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+const (
+	backendRequestTimeout = 30 * time.Second
+	backendResponseLimit  = 16 << 20
+	websocketMessageLimit = 16 << 20
+	websocketPongWait     = 2 * time.Minute
+	websocketPingPeriod   = 45 * time.Second
+	websocketWriteWait    = 10 * time.Second
+	readHeaderTimeout     = 10 * time.Second
+	httpIdleTimeout       = 60 * time.Second
+	maxHeaderBytes        = 64 << 10
+)
+
+var defaultHTTPClient = &http.Client{
+	Transport: &http.Transport{
+		DialContext: (&net.Dialer{
+			Timeout:   10 * time.Second,
+			KeepAlive: 30 * time.Second,
+		}).DialContext,
+		MaxIdleConns:          100,
+		IdleConnTimeout:       90 * time.Second,
+		ResponseHeaderTimeout: 15 * time.Second,
+	},
+	Timeout: backendRequestTimeout,
 }
-var client = &http.Client{Transport: tr}
-var upgrader = websocket.Upgrader{}
+
+var upgrader = websocket.Upgrader{
+	// Websocket agents are not browser sessions and may not send an Origin
+	// header matching the externally routed callback host.
+	CheckOrigin: func(*http.Request) bool { return true },
+}
+
+type requestMetadata struct {
+	UserAgent string
+	URL       string
+	RemoteIP  string
+}
 
 func newServer() Server {
 	return &WebsocketC2{}
@@ -63,45 +96,70 @@ func (s *WebsocketC2) SetSocketURI(uri string) {
 }
 
 func (s *WebsocketC2) PostMessage(msg []byte) []byte {
-	url := s.MythicBaseURL()
-	//log.Println("Sending POST request to url: ", url)
-	if s.Debug {
-		log.Println(fmt.Sprintln("Sending POST request to: ", url))
-	}
-	if req, err := http.NewRequest("POST", url, bytes.NewBuffer(msg)); err != nil {
-		if s.Debug {
-			log.Println(fmt.Sprintf("Error making new http request object: %s", err.Error()))
-		}
-		return make([]byte, 0)
-	} else {
-		req.Header.Add("X-forwarded-user-agent", req.Header.Get("User-Agent"))
-		req.Header.Add("x-forwarded-url", req.URL.RequestURI())
-		req.Header.Add("Mythic", "websocket")
-		contentLength := len(msg)
-		req.ContentLength = int64(contentLength)
+	return s.postMessage(context.Background(), msg, requestMetadata{})
+}
 
-		if resp, err := client.Do(req); err != nil {
-			if s.Debug {
-				log.Println(fmt.Sprintf("Error sending POST request: %s", err.Error()))
-			}
-			return make([]byte, 0)
-		} else if resp.StatusCode != 200 {
-			if s.Debug {
-				log.Println(fmt.Sprintf("Did not receive 200 response code: %d", resp.StatusCode))
-			}
-			return make([]byte, 0)
-		} else {
-			defer resp.Body.Close()
-			if body, err := io.ReadAll(resp.Body); err != nil {
-				if s.Debug {
-					log.Println(fmt.Sprintf("Error reading response body: %s", err.Error()))
-				}
-				return make([]byte, 0)
-			} else {
-				return body
-			}
-		}
+func (s *WebsocketC2) postMessage(ctx context.Context, msg []byte, metadata requestMetadata) []byte {
+	url := s.MythicBaseURL()
+	if s.Debug {
+		log.Printf("Sending POST request to: %s\n", url)
 	}
+	requestContext, cancel := context.WithTimeout(ctx, backendRequestTimeout)
+	defer cancel()
+	req, err := http.NewRequestWithContext(requestContext, http.MethodPost, url, bytes.NewReader(msg))
+	if err != nil {
+		if s.Debug {
+			log.Printf("Error making new http request object: %v\n", err)
+		}
+		return nil
+	}
+	if metadata.UserAgent != "" {
+		req.Header.Set("X-Forwarded-User-Agent", metadata.UserAgent)
+	}
+	if metadata.URL != "" {
+		req.Header.Set("X-Forwarded-URL", metadata.URL)
+	}
+	if metadata.RemoteIP != "" {
+		req.Header.Set("X-Forwarded-For", metadata.RemoteIP)
+	}
+	req.Header.Set("Mythic", "websocket")
+	req.ContentLength = int64(len(msg))
+
+	httpClient := s.HTTPClient
+	if httpClient == nil {
+		httpClient = defaultHTTPClient
+	}
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		if s.Debug {
+			log.Printf("Error sending POST request: %v\n", err)
+		}
+		return nil
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		// Drain a bounded amount so the transport can reuse ordinary-sized
+		// error responses without accepting an unbounded body.
+		_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 64<<10))
+		if s.Debug {
+			log.Printf("Did not receive 200 response code: %d\n", resp.StatusCode)
+		}
+		return nil
+	}
+	body, err := io.ReadAll(io.LimitReader(resp.Body, backendResponseLimit+1))
+	if err != nil {
+		if s.Debug {
+			log.Printf("Error reading response body: %v\n", err)
+		}
+		return nil
+	}
+	if len(body) > backendResponseLimit {
+		if s.Debug {
+			log.Printf("Mythic response exceeded %d bytes\n", backendResponseLimit)
+		}
+		return nil
+	}
+	return body
 }
 func (s *WebsocketC2) SetDebug(debug bool) {
 	s.Debug = debug
@@ -119,31 +177,68 @@ func (s *WebsocketC2) SetDefaultPage(newpage string) {
 
 // SocketHandler - Websockets handler
 func (s *WebsocketC2) SocketHandler(w http.ResponseWriter, r *http.Request) {
-	//Upgrade the websocket connection
-	upgrader.CheckOrigin = func(r *http.Request) bool { return true }
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		if s.Debug {
-			log.Println(fmt.Sprintf("Websocket upgrade failed: %s\n", err.Error()))
+			log.Printf("Websocket upgrade failed: %v\n", err)
 		}
-		http.Error(w, "websocket connection failed", http.StatusBadRequest)
 		return
 	}
+	configureWebsocketConnection(conn)
 	if s.Debug {
-		log.Println(fmt.Sprintf("Received new websocket client"))
+		log.Println("Received new websocket client")
 	}
-	taskingType, ok := r.Header["Accept-Type"]
-	if !ok || (len(taskingType) > 0 && taskingType[0] == "Poll") {
-		go s.managePollClient(conn)
-	} else {
+	if strings.EqualFold(strings.TrimSpace(r.Header.Get("Accept-Type")), "Push") {
 		go s.managePushClient(conn)
+	} else {
+		go s.managePollClient(conn, metadataFromRequest(r))
 	}
-
 }
-func (s *WebsocketC2) managePollClient(c *websocket.Conn) {
+
+func configureWebsocketConnection(conn *websocket.Conn) {
+	// might need to change this depending on how agents are handling ping/pong keep alives
+	conn.SetReadLimit(websocketMessageLimit)
+	_ = conn.SetReadDeadline(time.Now().Add(websocketPongWait))
+	conn.SetPongHandler(func(string) error {
+		return conn.SetReadDeadline(time.Now().Add(websocketPongWait))
+	})
+}
+
+func startWebsocketHeartbeat(conn *websocket.Conn, done <-chan struct{}) {
+	ticker := time.NewTicker(websocketPingPeriod)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-done:
+			return
+		case <-ticker.C:
+			if err := conn.WriteControl(websocket.PingMessage, nil, time.Now().Add(websocketWriteWait)); err != nil {
+				_ = conn.Close()
+				return
+			}
+		}
+	}
+}
+
+func metadataFromRequest(r *http.Request) requestMetadata {
+	remoteIP := r.RemoteAddr
+	if host, _, err := net.SplitHostPort(r.RemoteAddr); err == nil {
+		remoteIP = host
+	}
+	return requestMetadata{
+		UserAgent: r.UserAgent(),
+		URL:       r.URL.RequestURI(),
+		RemoteIP:  remoteIP,
+	}
+}
+
+func (s *WebsocketC2) managePollClient(c *websocket.Conn, metadata requestMetadata) {
+	heartbeatDone := make(chan struct{})
+	go startWebsocketHeartbeat(c, heartbeatDone)
 	defer func() {
+		close(heartbeatDone)
 		log.Println("Lost poll client")
-		c.Close()
+		_ = c.Close()
 	}()
 	log.Println("Got new poll client")
 	for {
@@ -157,9 +252,9 @@ func (s *WebsocketC2) managePollClient(c *websocket.Conn) {
 			return
 		}
 		if s.Debug {
-			log.Println(fmt.Sprintf("Received agent message %+v\n", m))
+			log.Printf("Received agent message %+v\n", m)
 		}
-		resp = s.PostMessage([]byte(m.Data))
+		resp = s.postMessage(context.Background(), []byte(m.Data), metadata)
 
 		reply := Message{}
 		if len(resp) == 0 {
@@ -175,38 +270,31 @@ func (s *WebsocketC2) managePollClient(c *websocket.Conn) {
 		}
 	}
 }
-func (s *WebsocketC2) getGRPConnection() *grpc.ClientConn {
+func (s *WebsocketC2) managePushClient(websocketClient *websocket.Conn) {
 	s.Lock.Lock()
-	defer s.Lock.Unlock()
 	if s.PushConn == nil {
 		s.PushConn = mythicGRPC.GetNewPushC2ClientConnection()
 	}
-	return s.PushConn
-}
-func (s *WebsocketC2) getNewPushClient() services.PushC2Client {
-	return services.NewPushC2Client(s.getGRPConnection())
-}
-func (s *WebsocketC2) managePushClient(websocketClient *websocket.Conn) {
-	grpcClient := s.getNewPushClient()
+	s.Lock.Unlock()
+	grpcClient := services.NewPushC2Client(s.PushConn)
 	streamContext, cancel := context.WithCancel(context.Background())
-	defer cancel()
 	grpcStream, err := grpcClient.StartPushC2Streaming(streamContext)
 	if err != nil {
+		cancel()
 		log.Printf("Failed to get new client: %v\n", err)
-		websocketClient.Close()
+		_ = websocketClient.Close()
 		return
-	} else {
-		log.Printf("Got new push client")
 	}
-	closeConnection := make(chan bool, 2)
+	log.Printf("Got new push client")
+
+	heartbeatDone := make(chan struct{})
+	go startWebsocketHeartbeat(websocketClient, heartbeatDone)
+	closeConnection := make(chan struct{}, 2)
 	// read from websocketClient and send to grpcClient
 	go func() {
 		defer func() {
 			log.Printf("finished websocket -> grpc\n")
-			grpcStream.CloseSend()
-			websocketClient.Close()
-			//cancel()
-			closeConnection <- true
+			closeConnection <- struct{}{}
 		}()
 		for {
 			fromAgent := Message{}
@@ -218,7 +306,7 @@ func (s *WebsocketC2) managePushClient(websocketClient *websocket.Conn) {
 				return
 			}
 			if s.Debug {
-				log.Println(fmt.Sprintf("Received agent message %+v\n", fromAgent))
+				log.Printf("Received agent message %+v\n", fromAgent)
 			}
 			readErr = grpcStream.Send(&services.PushC2MessageFromAgent{
 				C2ProfileName: "websocket",
@@ -237,10 +325,7 @@ func (s *WebsocketC2) managePushClient(websocketClient *websocket.Conn) {
 	go func() {
 		defer func() {
 			log.Printf("finished grpc -> websocket\n")
-			grpcStream.CloseSend()
-			websocketClient.Close()
-			//cancel()
-			closeConnection <- true
+			closeConnection <- struct{}{}
 		}()
 		for {
 			fromMythic, readErr := grpcStream.Recv()
@@ -251,19 +336,26 @@ func (s *WebsocketC2) managePushClient(websocketClient *websocket.Conn) {
 			reply := Message{}
 			reply.Data = string(fromMythic.GetMessage())
 			if s.Debug {
-				log.Println(fmt.Sprintf("sending agent reply %v\n", fromMythic))
+				log.Printf("sending agent reply %v\n", fromMythic)
 			}
 			readErr = websocketClient.WriteJSON(reply)
 			if readErr != nil {
 				if s.Debug {
-					log.Println(fmt.Sprintf("Error writing json to client %s", err.Error()))
+					log.Printf("Error writing json to client: %v\n", readErr)
 				}
 				return
 			}
 		}
 	}()
 	<-closeConnection
+	// Whichever relay exits first tears down both underlying operations. The
+	// websocket close releases ReadJSON while context cancellation releases
+	// blocked gRPC Send/Recv calls.
+	close(heartbeatDone)
+	cancel()
+	_ = websocketClient.Close()
 	<-closeConnection
+	_ = grpcStream.CloseSend()
 	log.Printf("closing push client connection\n")
 }
 
@@ -272,11 +364,11 @@ func (s *WebsocketC2) ServeDefaultPage(w http.ResponseWriter, r *http.Request) {
 	if (r.URL.Path == "/" || r.URL.Path == "/index.html") && r.Method == "GET" {
 		// Serve the default page if we receive a GET request at the base URI
 		http.ServeFile(w, r, s.GetDefaultPage())
+		return
 	}
 	http.Error(w, "Not Found", http.StatusNotFound)
-	return
 }
-func (s *WebsocketC2) ServeFileWrapper(fileUUID string) func(http.ResponseWriter, *http.Request) {
+func (s *WebsocketC2) ServeFileWrapper(fileUUID string, downloadToken string) func(http.ResponseWriter, *http.Request) {
 	mythicServerHost := os.Getenv("MYTHIC_SERVER_HOST")
 	mythicServerPort := os.Getenv("MYTHIC_SERVER_PORT")
 	directorForFiles := func(req *http.Request) {
@@ -287,16 +379,23 @@ func (s *WebsocketC2) ServeFileWrapper(fileUUID string) func(http.ResponseWriter
 		req.Host = fmt.Sprintf("%s:%s", mythicServerHost, mythicServerPort)
 		req.URL.Path = "/direct/download/" + fileUUID
 		req.Header.Add("mythic", "websocket")
+		req.Header.Add("authorization", fmt.Sprintf("Bearer %s", downloadToken))
 	}
 	proxyForFiles := &httputil.ReverseProxy{Director: directorForFiles,
 		Transport: &http.Transport{
 			DialContext: (&net.Dialer{
 				Timeout: 30 * time.Second,
 			}).DialContext,
-			MaxIdleConns:    10,
-			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+			MaxIdleConns:          10,
+			IdleConnTimeout:       90 * time.Second,
+			ResponseHeaderTimeout: backendRequestTimeout,
 		}}
 	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet && r.Method != http.MethodHead {
+			w.Header().Set("Allow", "GET, HEAD")
+			http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
+			return
+		}
 		proxyForFiles.ServeHTTP(w, r)
 	}
 }
@@ -306,9 +405,60 @@ func (s *WebsocketC2) ServeFile(w http.ResponseWriter, r *http.Request) {
 	if (r.URL.Path == "/" || r.URL.Path == "/index.html") && r.Method == "GET" {
 		// Serve the default page if we receive a GET request at the base URI
 		http.ServeFile(w, r, s.GetDefaultPage())
+		return
 	}
 	http.Error(w, "Not Found", http.StatusNotFound)
-	return
+}
+
+func newHTTPServer(address string, handler http.Handler) *http.Server {
+	return &http.Server{
+		Addr:              address,
+		Handler:           handler,
+		ReadHeaderTimeout: readHeaderTimeout,
+		IdleTimeout:       httpIdleTimeout,
+		MaxHeaderBytes:    maxHeaderBytes,
+	}
+}
+
+func certificateHost(bindAddress string) string {
+	if host, _, err := net.SplitHostPort(bindAddress); err == nil {
+		if host == "" {
+			return "localhost"
+		}
+		return host
+	}
+	if host := strings.TrimSpace(strings.Trim(bindAddress, "[]")); host != "" {
+		return host
+	}
+	return "localhost"
+}
+
+func tlsCertificateFiles(cf C2ConfigEntry) (certFile string, keyFile string, cleanup func(), err error) {
+	hasCert := strings.TrimSpace(cf.SSLCert) != ""
+	hasKey := strings.TrimSpace(cf.SSLKey) != ""
+	if hasCert != hasKey {
+		return "", "", func() {}, fmt.Errorf("both sslcert and sslkey must be configured together")
+	}
+	if hasCert {
+		return cf.SSLCert, cf.SSLKey, func() {}, nil
+	}
+
+	tlsDirectory, err := os.MkdirTemp("", "mythic-websocket-tls-")
+	if err != nil {
+		return "", "", func() {}, fmt.Errorf("create temporary TLS directory: %w", err)
+	}
+	cleanup = func() {
+		if removeErr := os.RemoveAll(tlsDirectory); removeErr != nil {
+			log.Printf("Failed to remove temporary TLS directory: %v\n", removeErr)
+		}
+	}
+	certFile = filepath.Join(tlsDirectory, "cert.pem")
+	keyFile = filepath.Join(tlsDirectory, "key.pem")
+	if err := httpscerts.Generate(certFile, keyFile, certificateHost(cf.BindAddress)); err != nil {
+		cleanup()
+		return "", "", func() {}, fmt.Errorf("generate self-signed TLS certificate: %w", err)
+	}
+	return certFile, keyFile, cleanup, nil
 }
 
 // Run - main function for the websocket profile
@@ -323,60 +473,35 @@ func (s *WebsocketC2) Run(cf C2ConfigEntry) {
 	s.SetSocketURI(cf.SocketURI)
 	newHTTPMux := http.NewServeMux()
 	// Handle requests to the base uri
-	for url, fileID := range cf.Payloads {
-		localFileID := fileID
+	for url, fileData := range cf.Payloads {
 		localURL := url
-		logging.LogInfo("Hosting file", "path", url, "uuid", localFileID)
-		newHTTPMux.HandleFunc(localURL, s.ServeFileWrapper(localFileID))
+		logging.LogInfo("Hosting file", "path", url, "uuid", fileData.AgentFileID)
+		newHTTPMux.HandleFunc(localURL, s.ServeFileWrapper(fileData.AgentFileID, fileData.DownloadToken))
 	}
 	newHTTPMux.HandleFunc("/", s.ServeDefaultPage)
 	// Handle requests to the websockets uri
 	logging.LogInfo("Serving websocket", "path", s.SocketURI)
 	newHTTPMux.HandleFunc(fmt.Sprintf("/%s", s.SocketURI), s.SocketHandler)
 
-	// Setup all the options according to the configuration
-	if !strings.Contains(cf.SSLKey, "") && !strings.Contains(cf.SSLCert, "") {
-
-		// copy the key and cert to the local directory
-		if keyFile, err := os.Open(cf.SSLKey); err != nil {
-			log.Println("Unable to open key file ", err.Error())
-		} else if keyfile, err := io.ReadAll(keyFile); err != nil {
-			log.Println("Unable to read key file ", err.Error())
-		} else if err = os.WriteFile("key.pem", keyfile, 0644); err != nil {
-			log.Println("Unable to write key file ", err.Error())
-		} else if certFile, err := os.Open(cf.SSLCert); err != nil {
-			log.Println("Unable to open cert file ", err.Error())
-		} else if certfile, err := io.ReadAll(certFile); err != nil {
-			log.Println("Unable to read cert file ", err.Error())
-		} else if err = os.WriteFile("cert.pem", certfile, 0644); err != nil {
-			log.Println("Unable to write cert file ", err.Error())
-		}
-	}
-
+	httpServer := newHTTPServer(cf.BindAddress, newHTTPMux)
 	if cf.UseSSL {
-		err := httpscerts.Check("cert.pem", "key.pem")
+		certFile, keyFile, cleanup, err := tlsCertificateFiles(cf)
 		if err != nil {
-			if s.Debug {
-				log.Println(fmt.Sprintf("Error for cert.pem or key.pem %s", err.Error()))
-			}
-			err = httpscerts.Generate("cert.pem", "key.pem", cf.BindAddress)
-			if err != nil {
-				log.Fatal("Error generating https cert")
-				os.Exit(1)
-			}
+			log.Fatal("Failed to configure TLS: ", err)
 		}
+		defer cleanup()
 		if s.Debug {
-			log.Println(fmt.Sprintf("Starting SSL server at https://%s and wss://%s", cf.BindAddress, cf.BindAddress))
+			log.Printf("Starting SSL server at https://%s and wss://%s\n", cf.BindAddress, cf.BindAddress)
 		}
-		err = http.ListenAndServeTLS(cf.BindAddress, "cert.pem", "key.pem", newHTTPMux)
+		err = httpServer.ListenAndServeTLS(certFile, keyFile)
 		if err != nil {
-			log.Fatal("Failed to start raven server: ", err)
+			log.Fatal("Failed to start websocket TLS server: ", err)
 		}
 	} else {
 		if s.Debug {
-			log.Println(fmt.Sprintf("Starting server at http://%s and ws://%s", cf.BindAddress, cf.BindAddress))
+			log.Printf("Starting server at http://%s and ws://%s\n", cf.BindAddress, cf.BindAddress)
 		}
-		err := http.ListenAndServe(cf.BindAddress, newHTTPMux)
+		err := httpServer.ListenAndServe()
 		if err != nil {
 			log.Fatal("Failed to start websocket server: ", err)
 		}
