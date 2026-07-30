@@ -1,4 +1,4 @@
-FROM itsafeaturemythic/mythic_python_go:latest as builder
+FROM itsafeaturemythic/mythic_python_go:latest AS builder
 
 COPY [".docker/requirements.txt", "requirements.txt"]
 RUN python3 -m pip wheel --wheel-dir /wheels -r requirements.txt
